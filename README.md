@@ -30,23 +30,26 @@
 
 ```mermaid
 flowchart LR
-    subgraph 离线摄取
-        D[PDF/Markdown 工艺文档] --> R[DocumentReader 解析]
-        R --> S[分块器: Token / 语义策略]
-        S --> E[Embedding: text-embedding-v3]
-        E --> V[(PGVector 向量库<br/>metadata: 工序号/工位/车型)]
+    subgraph ING["离线摄取"]
+        D["PDF/Markdown 工艺文档"] --> R["DocumentReader 解析"]
+        R --> S["分块器（Token/语义两种策略）"]
+        S --> E["Embedding text-embedding-v3"]
+        E --> V[("PGVector 向量库<br/>HNSW索引 + 元数据：工序号/工位/车型")]
     end
-    subgraph 在线问答
-        U[用户提问] --> RW[Query 改写/指代消解]
-        RW --> RT[RetrievalAugmentationAdvisor<br/>topK + 阈值 + 元数据过滤 + 重排]
-        V -.检索.-> RT
-        RT --> P[Prompt 模板: 仅依据上下文作答]
-        P --> L[LLM: DeepSeek-V3]
-        L -->|数值类问题| T[@Tool: queryTorqueSpec / listProcessByModel]
-        DB[(规则表 PostgreSQL)] --> T
-        T --> A[流式回答 SSE + 引用出处]
-        L --> A
+
+    subgraph QA["在线问答"]
+        U["用户提问"] --> RW["Query 改写/指代消解"]
+        RW --> RT["RetrievalAugmentationAdvisor<br/>topK + 相似度阈值 + 元数据过滤 + 重排"]
+        RT --> P["Prompt 组装<br/>仅依据上下文作答"]
+        P --> L["LLM DeepSeek-V3"]
+        L -.->|"决定调用工具"| T["@Tool 执行器<br/>queryTorqueSpec / listProcessByModel"]
+        T -->|"查询"| DB[("规则表 PostgreSQL")]
+        DB -->|"结果作为观察返回模型"| L
+        L --> A["SSE 流式回答"]
     end
+
+    V -.->|"向量检索"| RT
+    RT -.->|"命中片段的元数据 = 引用出处"| A
 ```
 ## 技术栈与选型取舍
 | 组件 | 选型 | 理由 |
